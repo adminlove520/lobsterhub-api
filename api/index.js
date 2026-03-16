@@ -13,6 +13,13 @@ if (ADMIN_KEYS.length === 0) {
   ADMIN_KEYS.push('lobster-admin-' + Math.random().toString(36).slice(2, 10));
 }
 
+// ========== 邀请系统 ==========
+const INVITE_KEY = 'invite_codes';
+
+function generateInviteCode() {
+  return 'LOB' + Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
 // 生成新密钥
 function generateAdminKey() {
   return 'lobster-' + Math.random().toString(36).slice(2, 12);
@@ -253,26 +260,69 @@ export default async function handler(req, res) {
       return res.json(success(player));
     }
 
-    // 创建/更新玩家
+    // 创建/更新玩家（需要邀请码）
     if (path === '/api/player' && method === 'POST') {
       const name = url.searchParams.get('name');
       const realm = url.searchParams.get('realm') || 'xianxia';
       const occupation = url.searchParams.get('occupation') || '';
+      const inviteCode = url.searchParams.get('invite_code') || '';
       
       if (!name) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
+      // 验证邀请码（如果玩家不存在）
       let player = await storage.get(`player:${name}`);
       if (!player) {
-        player = { name, realm, occupation, level: 1, exp: 0, checkinCount: 0, createdAt: new Date().toISOString() };
+        // 新玩家需要邀请码
+        if (!inviteCode) {
+          return res.status(400).json(error('需要邀请码，请联系管理员获取'));
+        }
+        
+        // 验证邀请码
+        const inviteData = await storage.get(`${INVITE_KEY}:${inviteCode}`);
+        if (!inviteData) {
+          return res.status(400).json(error('邀请码无效'));
+        }
+        
+        // 检查是否已使用
+        if (inviteData.used) {
+          return res.status(400).json(error('邀请码已使用'));
+        }
+        
+        // 标记为已使用
+        inviteData.used = true;
+        inviteData.usedBy = name;
+        inviteData.usedAt = new Date().toISOString();
+        await storage.set(`${INVITE_KEY}:${inviteCode}`, inviteData);
+        
+        player = { 
+          name, 
+          realm, 
+          occupation, 
+          level: 1, 
+          exp: inviteData.bonus || 10, // 邀请奖励
+          checkinCount: 0, 
+          createdAt: new Date().toISOString(),
+          invitedBy: inviteData.creator
+        };
+        
+        // 给邀请人奖励
+        if (inviteData.creator) {
+          const inviter = await storage.get(`player:${inviteData.creator}`);
+          if (inviter) {
+            inviter.exp = (inviter.exp || 0) + 5; // 邀请奖励
+            await storage.set(`player:${inviteData.creator}`, inviter);
+          }
+        }
       } else {
+        // 老玩家更新
         player.realm = realm;
         if (occupation) player.occupation = occupation;
       }
 
       await storage.set(`player:${name}`, player);
-      await addLog(storage, '创建玩家', { name, realm, occupation });
+      await addLog(storage, '创建玩家', { name, realm, occupation, inviteCode: inviteCode ? '已使用' : '老玩家' });
 
       return res.json(success(player));
     }
@@ -428,6 +478,47 @@ export default async function handler(req, res) {
       }
       const safeKeys = ADMIN_KEYS.map(k => k.slice(0, 4) + '****');
       return res.json(success({ admins: safeKeys, count: safeKeys.length }));
+    }
+
+    // 生成邀请码
+    if (path === '/api/admin/gen-invite' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const code = generateInviteCode();
+      const creator = url.searchParams.get('creator') || 'admin';
+      const bonus = parseInt(url.searchParams.get('bonus')) || 10;
+      
+      await storage.set(`${INVITE_KEY}:${code}`, {
+        code,
+        creator,
+        bonus,
+        used: false,
+        createdAt: new Date().toISOString()
+      });
+      
+      await addLog(storage, '生成邀请码', { code, creator, bonus }, true);
+      
+      return res.json(success({ 
+        message: '邀请码已生成！',
+        code: code,
+        bonus: bonus,
+        hint: '新玩家使用此码注册可获得 ' + bonus + ' 经验奖励'
+      }));
+    }
+
+    // 查看邀请码列表
+    if (path === '/api/admin/invites' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const keys = await storage.keys(`${INVITE_KEY}:*`);
+      let invites = [];
+      for (const key of keys) {
+        const inv = await storage.get(key);
+        if (inv) invites.push(inv);
+      }
+      return res.json(success({ invites, count: invites.length }));
     }
 
     // 生成新的管理员密钥
