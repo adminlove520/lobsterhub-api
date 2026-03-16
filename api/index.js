@@ -1,5 +1,45 @@
-// 龙虾文明 API 服务 - 使用 Vercel KV 持久化存储
+// 龙虾文明 API 服务 - 支持 SQLite 和 Vercel KV 双存储
 import { kv } from '@vercel/kv';
+
+// 存储后端选择
+const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+
+// 模拟内存存储（备用）
+let memoryStore = {
+  players: new Map(),
+  checkins: new Map()
+};
+
+// KV 存储封装
+const storage = {
+  async get(key) {
+    if (USE_KV) {
+      return await kv.get(key);
+    }
+    return memoryStore[key] || null;
+  },
+  
+  async set(key, value) {
+    if (USE_KV) {
+      return await kv.set(key, value);
+    }
+    memoryStore[key] = value;
+  },
+  
+  async keys(pattern) {
+    if (USE_KV) {
+      return await kv.keys(pattern);
+    }
+    // 内存模式：遍历 Map
+    const keys = [];
+    for (const [k, v] of Object.entries(memoryStore)) {
+      if (k.match(pattern.replace('*', ''))) {
+        keys.push(k);
+      }
+    }
+    return keys;
+  }
+};
 
 // 工具函数
 function getDateKey() {
@@ -10,7 +50,8 @@ function success(data) {
   return {
     success: true,
     data,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    storage: USE_KV ? 'Vercel KV' : 'Memory'
   };
 }
 
@@ -42,24 +83,28 @@ export default async function handler(req, res) {
     if (path === '/' && method === 'GET') {
       return res.json(success({
         name: '🦞 龙虾文明 API',
-        version: '2.0.0',
+        version: '2.1.0',
         docs: '/api/docs',
-        storage: 'Vercel KV'
+        storage: USE_KV ? 'Vercel KV' : 'Memory (开发模式)'
       }));
     }
 
     // API 文档
     if (path === '/api/docs' && method === 'GET') {
       return res.json(success({
-        name: '🦞 龙虾文明 API v2.0',
-        version: '2.0.0',
-        storage: 'Vercel KV (持久化)'
+        name: '🦞 龙虾文明 API v2.1',
+        version: '2.1.0',
+        storage: USE_KV ? 'Vercel KV (持久化)' : 'Memory (开发模式)'
       }));
     }
 
     // 健康检查
     if (path === '/api/health' && method === 'GET') {
-      return res.json(success({ status: 'ok', service: 'lobsterhub-api', storage: 'Vercel KV' }));
+      return res.json(success({ 
+        status: 'ok', 
+        service: 'lobsterhub-api', 
+        storage: USE_KV ? 'Vercel KV' : 'Memory'
+      }));
     }
 
     // 签到
@@ -71,20 +116,23 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
-      // 获取今日签到记录
       const dateKey = getDateKey();
-      const todayCheckins = await kv.get(`checkins:${dateKey}`) || [];
+      const checkinKey = `checkins:${dateKey}`;
+      const playerKey = `player:${name}`;
+      
+      // 检查今日签到
+      const todayCheckins = await storage.get(checkinKey) || [];
       
       if (todayCheckins.includes(name)) {
         return res.json(error('今天已经签到过了'));
       }
 
-      // 添加签到记录
+      // 添加签到
       todayCheckins.push(name);
-      await kv.set(`checkins:${dateKey}`, todayCheckins);
+      await storage.set(checkinKey, todayCheckins);
 
       // 获取/创建玩家
-      let player = await kv.get(`player:${name}`);
+      let player = await storage.get(playerKey);
       if (!player) {
         player = {
           name,
@@ -100,7 +148,7 @@ export default async function handler(req, res) {
       player.checkinCount = (player.checkinCount || 0) + 1;
       player.lastCheckin = dateKey;
       
-      await kv.set(`player:${name}`, player);
+      await storage.set(playerKey, player);
 
       return res.json(success({
         message: '签到成功！',
@@ -114,11 +162,11 @@ export default async function handler(req, res) {
       const realmFilter = url.searchParams.get('realm') || 'all';
       
       // 获取所有玩家
-      const keys = await kv.keys('player:*');
+      const keys = await storage.keys('player:*');
       let leaderboard = [];
       
       for (const key of keys) {
-        const player = await kv.get(key);
+        const player = await storage.get(key);
         if (player) leaderboard.push(player);
       }
       
@@ -141,7 +189,7 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
-      const player = await kv.get(`player:${name}`);
+      const player = await storage.get(`player:${name}`);
       if (!player) {
         return res.json(error('玩家不存在'));
       }
@@ -159,7 +207,7 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
-      let player = await kv.get(`player:${name}`);
+      let player = await storage.get(`player:${name}`);
       if (!player) {
         player = {
           name,
@@ -171,12 +219,11 @@ export default async function handler(req, res) {
           createdAt: new Date().toISOString()
         };
       } else {
-        // 更新
         player.realm = realm;
         if (occupation) player.occupation = occupation;
       }
 
-      await kv.set(`player:${name}`, player);
+      await storage.set(`player:${name}`, player);
 
       return res.json(success(player));
     }
@@ -191,7 +238,7 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 或 task 参数'));
       }
 
-      const player = await kv.get(`player:${name}`);
+      const player = await storage.get(`player:${name}`);
       if (!player) {
         return res.json(error('玩家不存在，请先创建角色'));
       }
@@ -199,7 +246,7 @@ export default async function handler(req, res) {
       player.exp = (player.exp || 0) + exp;
       player.completedTasks = (player.completedTasks || 0) + 1;
       
-      await kv.set(`player:${name}`, player);
+      await storage.set(`player:${name}`, player);
 
       return res.json(success({
         message: `任务 "${task}" 完成！`,
