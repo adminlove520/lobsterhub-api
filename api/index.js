@@ -4,6 +4,14 @@
 const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 const USE_REDIS = !!process.env.REDIS_URL;
 
+// 管理员密钥（环境变量）
+const ADMIN_KEY = process.env.ADMIN_KEY || 'lobster-admin-2026';
+
+// 验证管理员
+function isAdmin(url) {
+  return url.searchParams.get('admin_key') === ADMIN_KEY;
+}
+
 // 简单内存存储（开发模式备用）
 let memoryStore = {};
 
@@ -264,6 +272,107 @@ export default async function handler(req, res) {
       await storage.set(`player:${name}`, player);
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
+    }
+
+    // ========== 管理员接口 ==========
+    
+    // 删除玩家
+    if (path === '/api/admin/delete' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const name = url.searchParams.get('name');
+      if (!name) {
+        return res.status(400).json(error('缺少 name 参数'));
+      }
+      await storage.set(`player:${name}`, null);
+      return res.json(success({ message: `已删除玩家 ${name}` }));
+    }
+
+    // 修改经验
+    if (path === '/api/admin/exp' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const name = url.searchParams.get('name');
+      const exp = parseInt(url.searchParams.get('exp')) || 0;
+      const action = url.searchParams.get('action') || 'set'; // set, add, sub
+      
+      let player = await storage.get(`player:${name}`);
+      if (!player) {
+        return res.json(error('玩家不存在'));
+      }
+      
+      if (action === 'add') player.exp = (player.exp || 0) + exp;
+      else if (action === 'sub') player.exp = Math.max(0, (player.exp || 0) - exp);
+      else player.exp = exp;
+      
+      await storage.set(`player:${name}`, player);
+      return res.json(success({ message: `${name} 经验已设为 ${player.exp}`, player }));
+    }
+
+    // 重置签到
+    if (path === '/api/admin/reset-checkin' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const name = url.searchParams.get('name');
+      const dateKey = getDateKey();
+      
+      if (name) {
+        // 重置单个玩家
+        const checkinKey = `checkins:${dateKey}`;
+        let checkins = (await storage.get(checkinKey)) || [];
+        checkins = checkins.filter(n => n !== name);
+        await storage.set(checkinKey, checkins);
+        return res.json(success({ message: `已重置 ${name} 今日签到` }));
+      } else {
+        // 重置所有今日签到
+        const checkinKey = `checkins:${dateKey}`;
+        await storage.set(checkinKey, []);
+        return res.json(success({ message: '已重置所有玩家今日签到' }));
+      }
+    }
+
+    // 清空所有数据（危险！）
+    if (path === '/api/admin/clear-all' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const confirm = url.searchParams.get('confirm');
+      if (confirm !== 'yes-im-sure') {
+        return res.status(400).json(error('需要确认: ?confirm=yes-im-sure'));
+      }
+      
+      const keys = await storage.keys('player:*');
+      for (const key of keys) {
+        await storage.set(key, null);
+      }
+      return res.json(success({ message: '已清空所有玩家数据' }));
+    }
+
+    // 查看所有数据
+    if (path === '/api/admin/dump' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const keys = await storage.keys('player:*');
+      let players = [];
+      for (const key of keys) {
+        const p = await storage.get(key);
+        if (p) players.push(p);
+      }
+      return res.json(success({ players, count: players.length }));
+    }
+
+    // 查看签到记录
+    if (path === '/api/admin/checkins' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const dateKey = getDateKey();
+      const checkins = (await storage.get(`checkins:${dateKey}`)) || [];
+      return res.json(success({ date: dateKey, checkins, count: checkins.length }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
