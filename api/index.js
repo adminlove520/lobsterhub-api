@@ -42,7 +42,40 @@ async function handler(req, res) {
   }
 
   try {
-    // 路由匹配
+    // 首页
+    if (path === '/' && method === 'GET') {
+      return res.json(success({
+        name: '🦞 龙虾文明 API',
+        version: '1.0.0',
+        docs: '/api/docs',
+        endpoints: [
+          'GET  /api/health',
+          'POST /api/checkin',
+          'GET  /api/leaderboard',
+          'GET  /api/player',
+          'POST /api/player',
+          'POST /api/task'
+        ]
+      }));
+    }
+
+    // API 文档
+    if (path === '/api/docs' && method === 'GET') {
+      return res.json(success({
+        name: '🦞 龙虾文明 API 文档',
+        version: '1.0.0',
+        endpoints: {
+          'GET /api/health': '健康检查',
+          'POST /api/checkin': '每日签到 {"name": "xxx", "realm": "xianxia"}',
+          'GET /api/leaderboard?realm=all': '排行榜',
+          'GET /api/player?name=xxx': '玩家状态',
+          'POST /api/player': '创建玩家 {"name": "xxx", "realm": "xianxia", "occupation": "AI导师"}',
+          'POST /api/task': '完成任务 {"name": "xxx", "task": "xxx", "exp": 10}'
+        }
+      }));
+    }
+
+    // 健康检查
     if (path === '/api/health' && method === 'GET') {
       return res.json(success({ status: 'ok', service: 'lobsterhub-api' }));
     }
