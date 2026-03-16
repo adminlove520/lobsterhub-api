@@ -285,8 +285,23 @@ export default async function handler(req, res) {
       if (!name) {
         return res.status(400).json(error('缺少 name 参数'));
       }
+      
+      // 删除玩家
       await storage.set(`player:${name}`, null);
-      return res.json(success({ message: `已删除玩家 ${name}` }));
+      
+      // 清理该玩家的所有签到记录（遍历最近7天）
+      for (let i = 0; i < 7; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateKey = date.toISOString().split('T')[0];
+        const checkinKey = `checkins:${dateKey}`;
+        const checkins = (await storage.get(checkinKey)) || [];
+        if (checkins.includes(name)) {
+          await storage.set(checkinKey, checkins.filter(n => n !== name));
+        }
+      }
+      
+      return res.json(success({ message: `已删除玩家 ${name} 及所有签到记录` }));
     }
 
     // 修改经验
