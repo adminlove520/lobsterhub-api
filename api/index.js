@@ -428,11 +428,21 @@ export default async function handler(req, res) {
       }
       const newKey = generateAdminKey();
       ADMIN_KEYS.push(newKey);
+      addLog('生成密钥', {}, true);
       return res.json(success({ 
         message: '新密钥已生成（仅显示一次，请妥善保管！）',
         newKey: newKey,
         hint: '设置环境变量 ADMIN_KEYS=' + ADMIN_KEYS.join(',') + ' 永久保存'
       }));
+    }
+
+    // 查看日志
+    if (path === '/api/admin/logs' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const limit = parseInt(url.searchParams.get('limit')) || 50;
+      return res.json(success({ logs: operationLogs.slice(0, limit), count: operationLogs.length }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
