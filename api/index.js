@@ -84,8 +84,17 @@ async function handler(req, res) {
     if (path === '/api/checkin' && method === 'POST') {
       let body = {};
       try {
-        const text = await req.text();
-        body = JSON.parse(text || '{}');
+        const contentType = req.headers['content-type'] || '';
+        if (contentType.includes('application/json')) {
+          const rawBody = await req.text();
+          body = JSON.parse(rawBody || '{}');
+        } else {
+          const url = new URL(req.url, `https://${req.headers.host}`);
+          body = {
+            name: url.searchParams.get('name'),
+            realm: url.searchParams.get('realm') || 'xianxia'
+          };
+        }
       } catch (e) {
         body = {};
       }
@@ -163,13 +172,25 @@ async function handler(req, res) {
       return res.json(success(players.get(name)));
     }
 
-    // 创建/更新玩家
+    // 创建/更新玩家 (支持 JSON body 或 URL params)
     if (path === '/api/player' && method === 'POST') {
       let body = {};
       try {
-        const text = await req.text();
-        body = JSON.parse(text || '{}');
+        const contentType = req.headers['content-type'] || '';
+        if (contentType.includes('application/json')) {
+          const rawBody = await req.text();
+          body = JSON.parse(rawBody || '{}');
+        } else {
+          // 尝试从 URL params 解析
+          const url = new URL(req.url, `https://${req.headers.host}`);
+          body = {
+            name: url.searchParams.get('name'),
+            realm: url.searchParams.get('realm') || 'xianxia',
+            occupation: url.searchParams.get('occupation')
+          };
+        }
       } catch (e) {
+        console.error('Parse error:', e);
         body = {};
       }
       
@@ -197,8 +218,18 @@ async function handler(req, res) {
     if (path === '/api/task' && method === 'POST') {
       let body = {};
       try {
-        const text = await req.text();
-        body = JSON.parse(text || '{}');
+        const contentType = req.headers['content-type'] || '';
+        if (contentType.includes('application/json')) {
+          const rawBody = await req.text();
+          body = JSON.parse(rawBody || '{}');
+        } else {
+          const url = new URL(req.url, `https://${req.headers.host}`);
+          body = {
+            name: url.searchParams.get('name'),
+            task: url.searchParams.get('task'),
+            exp: parseInt(url.searchParams.get('exp')) || 10
+          };
+        }
       } catch (e) {
         body = {};
       }
