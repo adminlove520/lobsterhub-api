@@ -15,6 +15,8 @@ if (ADMIN_KEYS.length === 0) {
 
 // ========== 邀请系统 ==========
 const INVITE_KEY = 'invite_codes';
+const INVITE_EXPIRE_DAYS = 7; // 邀请码有效期7天
+const INVITE_MAX_USES = 5; // 邀请码最多使用5次
 
 function generateInviteCode() {
   return 'LOB' + Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -285,14 +287,23 @@ export default async function handler(req, res) {
           return res.status(400).json(error('邀请码无效'));
         }
         
-        // 检查是否已使用
-        if (inviteData.used) {
-          return res.status(400).json(error('邀请码已使用'));
+        // 检查是否过期
+        const created = new Date(inviteData.createdAt);
+        const now = new Date();
+        const daysSinceCreated = (now - created) / (1000 * 60 * 60 * 24);
+        if (daysSinceCreated > INVITE_EXPIRE_DAYS) {
+          return res.status(400).json(error('邀请码已过期'));
         }
         
-        // 标记为已使用
-        inviteData.used = true;
-        inviteData.usedBy = name;
+        // 检查使用次数
+        const usedCount = inviteData.usedCount || 0;
+        if (usedCount >= INVITE_MAX_USES) {
+          return res.status(400).json(error('邀请码已达到使用上限'));
+        }
+        
+        // 更新使用次数
+        inviteData.usedCount = usedCount + 1;
+        inviteData[`usedBy${usedCount + 1}`] = name;
         inviteData.usedAt = new Date().toISOString();
         await storage.set(`${INVITE_KEY}:${inviteCode}`, inviteData);
         
@@ -404,6 +415,45 @@ export default async function handler(req, res) {
         code: code,
         bonus: bonus,
         hint: '邀请朋友加入，双方都获得 ' + bonus + ' 经验奖励！'
+      }));
+    }
+
+    // 玩家查看自己的邀请统计
+    if (path === '/api/invite/stats' && method === 'GET') {
+      const name = url.searchParams.get('name');
+      
+      if (!name) {
+        return res.status(400).json(error('缺少 name 参数'));
+      }
+      
+      // 获取玩家邀请码
+      const playerCode = await storage.get(`${INVITE_KEY}:player:${name}`);
+      if (!playerCode) {
+        return res.json(success({ 
+          name,
+          code: null,
+          inviteCount: 0,
+          message: '你还没有生成邀请码'
+        }));
+      }
+      
+      // 获取邀请码详情
+      const inviteData = await storage.get(`${INVITE_KEY}:${playerCode.code}`);
+      
+      return res.json(success({ 
+        name,
+        code: playerCode.code,
+        bonus: playerCode.bonus,
+        inviteCount: inviteData?.usedCount || 0,
+        maxUses: INVITE_MAX_USES,
+        createdAt: inviteData?.createdAt,
+        usedBy: inviteData?.usedBy1 ? [
+          inviteData.usedBy1,
+          inviteData.usedBy2,
+          inviteData.usedBy3,
+          inviteData.usedBy4,
+          inviteData.usedBy5
+        ].filter(Boolean) : []
       }));
     }
 
