@@ -24,6 +24,13 @@ function isAdmin(url) {
   return ADMIN_KEYS.includes(key);
 }
 
+// 操作日志（内存存储，最多200条）
+const operationLogs = [];
+function addLog(action, detail, admin = false) {
+  operationLogs.unshift({ timestamp: new Date().toISOString(), action, detail, admin });
+  if (operationLogs.length > 200) operationLogs.length = 200;
+}
+
 // 简单内存存储（开发模式备用）
 let memoryStore = {};
 
@@ -199,6 +206,7 @@ export default async function handler(req, res) {
       player.lastCheckin = dateKey;
       
       await storage.set(playerKey, player);
+      addLog('签到', { name, realm: player.realm });
 
       return res.json(success({ message: '签到成功！', reward: '+5 经验', player }));
     }
@@ -259,6 +267,7 @@ export default async function handler(req, res) {
       }
 
       await storage.set(`player:${name}`, player);
+      addLog('创建玩家', { name, realm, occupation });
 
       return res.json(success(player));
     }
@@ -282,6 +291,7 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
+      addLog('完成任务', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
