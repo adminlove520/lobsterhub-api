@@ -229,12 +229,25 @@ export default async function handler(req, res) {
     if (path === '/api/leaderboard' && method === 'GET') {
       const realmFilter = url.searchParams.get('realm') || 'all';
       
+      // 流派标签映射
+      const realmLabels = {
+        'xianxia': { label: '修仙', emoji: '🧘', color: '🟣' },
+        'cyber': { label: '赛博', emoji: '🏙️', color: '🔵' },
+        'magic': { label: '魔法', emoji: '✨', color: '🟡' },
+        'scifi': { label: '科幻', emoji: '🚀', color: '⚪' }
+      };
+      
       const keys = await storage.keys('player:*');
       let leaderboard = [];
       
       for (const key of keys) {
         const player = await storage.get(key);
-        if (player) leaderboard.push(player);
+        if (player) {
+          // 添加标签
+          const realmInfo = realmLabels[player.realm] || { label: player.realm, emoji: '❓', color: '⚫' };
+          player.realmLabel = realmInfo.emoji + ' ' + realmInfo.label;
+          leaderboard.push(player);
+        }
       }
       
       if (realmFilter !== 'all') {
