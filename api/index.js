@@ -232,9 +232,17 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 或 task 参数'));
       }
 
-      const player = await storage.get(`player:${name}`);
+      // 自动创建玩家（如果不存在）
+      let player = await storage.get(`player:${name}`);
       if (!player) {
-        return res.json(error('玩家不存在，请先创建角色'));
+        player = {
+          name,
+          realm: 'xianxia',
+          level: 1,
+          exp: 0,
+          checkinCount: 0,
+          createdAt: new Date().toISOString()
+        };
       }
 
       player.exp = (player.exp || 0) + exp;
