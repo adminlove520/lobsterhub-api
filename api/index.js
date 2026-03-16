@@ -5,11 +5,8 @@ import { kv } from '@vercel/kv';
 const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 const USE_SQLITE = process.env.SQLITE_URL || !USE_KV;
 
-// 简单内存存储（开发模式备用）
-let memoryStore = {
-  players: new Map(),
-  checkins: new Map()
-};
+// 简单内存存储（开发模式备用）- 用普通对象
+let memoryStore = {};
 
 // KV 存储封装
 const kvStorage = {
