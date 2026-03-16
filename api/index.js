@@ -7,73 +7,6 @@ const USE_REDIS = !!process.env.REDIS_URL;
 // 管理员密钥（环境变量）
 const ADMIN_KEY = process.env.ADMIN_KEY || 'lobster-admin-2026';
 
-// ========== 限流配置 ==========
-const RATE_LIMIT_WINDOW = 60; // 60秒窗口
-const RATE_LIMIT_MAX = 30; // 最多30次
-const RATE_LIMIT_CHECKIN = 1; // 签到每分钟1次
-
-let rateLimitStore = {}; // 简单内存限流
-
-function checkRateLimit(ip, type = 'normal') {
-  const now = Date.now();
-  const key = `${ip}:${type}`;
-  const windowStart = now - RATE_LIMIT_WINDOW * 1000;
-  
-  if (!rateLimitStore[key]) {
-    rateLimitStore[key] = { count: 0, firstRequest: now };
-  }
-  
-  const record = rateLimitStore[key];
-  
-  // 重置窗口
-  if (record.firstRequest < windowStart) {
-    record.count = 0;
-    record.firstRequest = now;
-  }
-  
-  const max = type === 'checkin' ? RATE_LIMIT_CHECKIN : RATE_LIMIT_MAX;
-  if (record.count >= max) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
-
-function getClientIp(req) {
-  return req.headers.get('x-forwarded-for')?.split(',')[0] || 
-         req.headers.get('x-real-ip') || 
-         'unknown';
-}
-
-// ========== 操作日志 ==========
-const LOG_KEY = 'logs';
-
-async function addLog(action, detail, admin = false) {
-  const log = {
-    timestamp: new Date().toISOString(),
-    action,
-    detail,
-    admin
-  };
-  
-  // 获取现有日志
-  let logs = (await storage.get(LOG_KEY)) || [];
-  logs.unshift(log); // 添加到开头
-  
-  // 只保留最近1000条
-  if (logs.length > 1000) {
-    logs = logs.slice(0, 1000);
-  }
-  
-  await storage.set(LOG_KEY, logs);
-}
-
-// ========== 管理员验证 ==========
-function isAdmin(url) {
-  return url.searchParams.get('admin_key') === ADMIN_KEY;
-}
-
 // 简单内存存储（开发模式备用）
 let memoryStore = {};
 
@@ -81,22 +14,7 @@ let memoryStore = {};
 let redisClient = null;
 let redisReady = false;
 
-// 初始化 Redis
-async function initRedis() {
-  if (!USE_REDIS || redisClient) return;
-  try {
-    const redis = await import('redis');
-    redisClient = redis.createClient({ url: process.env.REDIS_URL });
-    redisClient.on('error', err => console.error('Redis error:', err));
-    await redisClient.connect();
-    redisReady = true;
-    console.log('Redis connected!');
-  } catch (e) {
-    console.error('Redis init failed:', e);
-  }
-}
-
-// 存储封装
+// 存储封装（先定义）
 const storage = {
   async get(key) {
     if (USE_KV) {
@@ -116,6 +34,9 @@ const storage = {
       return await kv.set(key, value);
     }
     if (USE_REDIS && redisReady) {
+      if (value === null) {
+        return await redisClient.del(key);
+      }
       return await redisClient.set(key, JSON.stringify(value));
     }
     memoryStore[key] = value;
@@ -134,6 +55,84 @@ const storage = {
     return Object.keys(memoryStore).filter(k => k.startsWith(prefix));
   }
 };
+
+// 初始化 Redis
+async function initRedis() {
+  if (!USE_REDIS || redisClient) return;
+  try {
+    const redis = await import('redis');
+    redisClient = redis.createClient({ url: process.env.REDIS_URL });
+    redisClient.on('error', err => console.error('Redis error:', err));
+    await redisClient.connect();
+    redisReady = true;
+    console.log('Redis connected!');
+  } catch (e) {
+    console.error('Redis init failed:', e);
+  }
+}
+
+// ========== 操作日志 ==========
+const LOG_KEY = 'logs';
+
+async function addLog(action, detail, admin = false) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    action,
+    detail,
+    admin
+  };
+  
+  let logs = (await storage.get(LOG_KEY)) || [];
+  logs.unshift(log);
+  
+  if (logs.length > 1000) {
+    logs = logs.slice(0, 1000);
+  }
+  
+  await storage.set(LOG_KEY, logs);
+}
+
+// ========== 限流配置 ==========
+const RATE_LIMIT_WINDOW = 60;
+const RATE_LIMIT_MAX = 30;
+
+let rateLimitStore = {};
+
+function checkRateLimit(ip, type = 'normal') {
+  const now = Date.now();
+  const key = `${ip}:${type}`;
+  const windowStart = now - RATE_LIMIT_WINDOW * 1000;
+  
+  if (!rateLimitStore[key]) {
+    rateLimitStore[key] = { count: 0, firstRequest: now };
+  }
+  
+  const record = rateLimitStore[key];
+  
+  if (record.firstRequest < windowStart) {
+    record.count = 0;
+    record.firstRequest = now;
+  }
+  
+  const max = type === 'checkin' ? 1 : RATE_LIMIT_MAX;
+  if (record.count >= max) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
+function getClientIp(req) {
+  return req.headers.get('x-forwarded-for')?.split(',')[0] || 
+         req.headers.get('x-real-ip') || 
+         'unknown';
+}
+
+// 管理员验证
+function isAdmin(url) {
+  return url.searchParams.get('admin_key') === ADMIN_KEY;
+}
 
 // 工具函数
 function getDateKey() {
@@ -159,7 +158,6 @@ function error(message) {
 
 // API 路由
 export default async function handler(req, res) {
-  // 初始化 Redis
   if (USE_REDIS && !redisReady) {
     await initRedis();
   }
@@ -174,7 +172,6 @@ export default async function handler(req, res) {
   const path = url.pathname;
   const method = req.method;
 
-  // CORS 头
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -184,7 +181,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 首页
     if (path === '/' && method === 'GET') {
       const keys = await storage.keys('player:*');
       let totalPlayers = 0, totalCheckins = 0;
@@ -195,23 +191,21 @@ export default async function handler(req, res) {
       
       return res.json(success({
         name: '🦞 龙虾文明 API',
-        version: '2.5.0',
+        version: '2.6.0',
         docs: '/api/docs',
         stats: { players: totalPlayers, checkins: totalCheckins },
         storage: USE_KV ? 'Vercel KV' : (USE_REDIS ? 'Redis' : 'Memory')
       }));
     }
 
-    // API 文档
     if (path === '/api/docs' && method === 'GET') {
       return res.json(success({
-        name: '🦞 龙虾文明 API v2.5',
-        version: '2.5.0',
+        name: '🦞 龙虾文明 API v2.6',
+        version: '2.6.0',
         storage: USE_KV ? 'Vercel KV' : (USE_REDIS ? 'Redis (持久化)' : 'Memory')
       }));
     }
 
-    // 健康检查
     if (path === '/api/health' && method === 'GET') {
       return res.json(success({ 
         status: 'ok', 
@@ -233,21 +227,15 @@ export default async function handler(req, res) {
       const checkinKey = `checkins:${dateKey}`;
       const playerKey = `player:${name}`;
       
-      // 检查今日签到
       const todayCheckins = (await storage.get(checkinKey)) || [];
       
       if (todayCheckins.includes(name)) {
         return res.json(error('今天已经签到过了'));
       }
 
-      // 添加签到
       todayCheckins.push(name);
       await storage.set(checkinKey, todayCheckins);
-      
-      // 记录日志
-      await addLog('checkin', { name, realm });
 
-      // 获取/创建玩家
       let player = await storage.get(playerKey);
       if (!player) {
         player = { name, realm, level: 1, exp: 0, checkinCount: 0, createdAt: new Date().toISOString() };
@@ -258,6 +246,8 @@ export default async function handler(req, res) {
       player.lastCheckin = dateKey;
       
       await storage.set(playerKey, player);
+      
+      await addLog('checkin', { name, realm });
 
       return res.json(success({ message: '签到成功！', reward: '+5 经验', player }));
     }
@@ -318,8 +308,6 @@ export default async function handler(req, res) {
       }
 
       await storage.set(`player:${name}`, player);
-
-      // 记录日志
       await addLog('create_player', { name, realm, occupation });
 
       return res.json(success(player));
@@ -344,8 +332,6 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
-
-      // 记录日志
       await addLog('complete_task', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
@@ -363,10 +349,8 @@ export default async function handler(req, res) {
         return res.status(400).json(error('缺少 name 参数'));
       }
       
-      // 删除玩家
       await storage.set(`player:${name}`, null);
       
-      // 清理该玩家的所有签到记录（遍历最近7天）
       for (let i = 0; i < 7; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -378,6 +362,8 @@ export default async function handler(req, res) {
         }
       }
       
+      await addLog('admin_delete', { name }, true);
+      
       return res.json(success({ message: `已删除玩家 ${name} 及所有签到记录` }));
     }
 
@@ -388,7 +374,7 @@ export default async function handler(req, res) {
       }
       const name = url.searchParams.get('name');
       const exp = parseInt(url.searchParams.get('exp')) || 0;
-      const action = url.searchParams.get('action') || 'set'; // set, add, sub
+      const action = url.searchParams.get('action') || 'set';
       
       let player = await storage.get(`player:${name}`);
       if (!player) {
@@ -400,6 +386,8 @@ export default async function handler(req, res) {
       else player.exp = exp;
       
       await storage.set(`player:${name}`, player);
+      await addLog('admin_exp', { name, exp, action }, true);
+      
       return res.json(success({ message: `${name} 经验已设为 ${player.exp}`, player }));
     }
 
@@ -412,21 +400,20 @@ export default async function handler(req, res) {
       const dateKey = getDateKey();
       
       if (name) {
-        // 重置单个玩家
         const checkinKey = `checkins:${dateKey}`;
         let checkins = (await storage.get(checkinKey)) || [];
         checkins = checkins.filter(n => n !== name);
         await storage.set(checkinKey, checkins);
+        await addLog('admin_reset_checkin', { name }, true);
         return res.json(success({ message: `已重置 ${name} 今日签到` }));
       } else {
-        // 重置所有今日签到
-        const checkinKey = `checkins:${dateKey}`;
-        await storage.set(checkinKey, []);
+        await storage.set(`checkins:${dateKey}`, []);
+        await addLog('admin_reset_all_checkins', {}, true);
         return res.json(success({ message: '已重置所有玩家今日签到' }));
       }
     }
 
-    // 清空所有数据（危险！）
+    // 清空所有数据
     if (path === '/api/admin/clear-all' && method === 'POST') {
       if (!isAdmin(url)) {
         return res.status(403).json(error('无权限，需要 admin_key'));
@@ -440,10 +427,12 @@ export default async function handler(req, res) {
       for (const key of keys) {
         await storage.set(key, null);
       }
+      await addLog('admin_clear_all', {}, true);
+      
       return res.json(success({ message: '已清空所有玩家数据' }));
     }
 
-    // 查看所有数据
+    // 导出数据
     if (path === '/api/admin/dump' && method === 'GET') {
       if (!isAdmin(url)) {
         return res.status(403).json(error('无权限，需要 admin_key'));
@@ -457,7 +446,7 @@ export default async function handler(req, res) {
       return res.json(success({ players, count: players.length }));
     }
 
-    // 查看签到记录
+    // 签到记录
     if (path === '/api/admin/checkins' && method === 'GET') {
       if (!isAdmin(url)) {
         return res.status(403).json(error('无权限，需要 admin_key'));
@@ -467,7 +456,7 @@ export default async function handler(req, res) {
       return res.json(success({ date: dateKey, checkins, count: checkins.length }));
     }
 
-    // 查看日志
+    // 日志
     if (path === '/api/admin/logs' && method === 'GET') {
       if (!isAdmin(url)) {
         return res.status(403).json(error('无权限，需要 admin_key'));
