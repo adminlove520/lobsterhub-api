@@ -5,7 +5,8 @@ const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 const USE_REDIS = !!process.env.REDIS_URL;
 
 // 管理员密钥列表（环境变量，逗号分隔）
-const ADMIN_KEYS = (process.env.ADMIN_KEYS || process.env.ADMIN_KEY || '').split(',').map(k => k.trim()).filter(k => k);
+const DEFAULT_KEY = 'lobster-admin-2026'; // 默认密钥
+const ADMIN_KEYS = (process.env.ADMIN_KEYS || process.env.ADMIN_KEY || DEFAULT_KEY).split(',').map(k => k.trim()).filter(k => k);
 
 // 如果没有配置密钥，自动生成默认密钥
 if (ADMIN_KEYS.length === 0) {
