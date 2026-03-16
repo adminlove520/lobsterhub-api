@@ -7,7 +7,69 @@ const USE_REDIS = !!process.env.REDIS_URL;
 // 管理员密钥（环境变量）
 const ADMIN_KEY = process.env.ADMIN_KEY || 'lobster-admin-2026';
 
-// 验证管理员
+// ========== 限流配置 ==========
+const RATE_LIMIT_WINDOW = 60; // 60秒窗口
+const RATE_LIMIT_MAX = 30; // 最多30次
+const RATE_LIMIT_CHECKIN = 1; // 签到每分钟1次
+
+let rateLimitStore = {}; // 简单内存限流
+
+function checkRateLimit(ip, type = 'normal') {
+  const now = Date.now();
+  const key = `${ip}:${type}`;
+  const windowStart = now - RATE_LIMIT_WINDOW * 1000;
+  
+  if (!rateLimitStore[key]) {
+    rateLimitStore[key] = { count: 0, firstRequest: now };
+  }
+  
+  const record = rateLimitStore[key];
+  
+  // 重置窗口
+  if (record.firstRequest < windowStart) {
+    record.count = 0;
+    record.firstRequest = now;
+  }
+  
+  const max = type === 'checkin' ? RATE_LIMIT_CHECKIN : RATE_LIMIT_MAX;
+  if (record.count >= max) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
+function getClientIp(req) {
+  return req.headers.get('x-forwarded-for')?.split(',')[0] || 
+         req.headers.get('x-real-ip') || 
+         'unknown';
+}
+
+// ========== 操作日志 ==========
+const LOG_KEY = 'logs';
+
+async function addLog(action, detail, admin = false) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    action,
+    detail,
+    admin
+  };
+  
+  // 获取现有日志
+  let logs = (await storage.get(LOG_KEY)) || [];
+  logs.unshift(log); // 添加到开头
+  
+  // 只保留最近1000条
+  if (logs.length > 1000) {
+    logs = logs.slice(0, 1000);
+  }
+  
+  await storage.set(LOG_KEY, logs);
+}
+
+// ========== 管理员验证 ==========
 function isAdmin(url) {
   return url.searchParams.get('admin_key') === ADMIN_KEY;
 }
@@ -102,6 +164,12 @@ export default async function handler(req, res) {
     await initRedis();
   }
 
+  // 限流检查
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json(error('请求过于频繁，请稍后再试'));
+  }
+
   const url = new URL(req.url, `https://${req.headers.host}`);
   const path = url.pathname;
   const method = req.method;
@@ -175,6 +243,9 @@ export default async function handler(req, res) {
       // 添加签到
       todayCheckins.push(name);
       await storage.set(checkinKey, todayCheckins);
+      
+      // 记录日志
+      await addLog('checkin', { name, realm });
 
       // 获取/创建玩家
       let player = await storage.get(playerKey);
@@ -248,6 +319,9 @@ export default async function handler(req, res) {
 
       await storage.set(`player:${name}`, player);
 
+      // 记录日志
+      await addLog('create_player', { name, realm, occupation });
+
       return res.json(success(player));
     }
 
@@ -270,6 +344,9 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
+
+      // 记录日志
+      await addLog('complete_task', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
@@ -388,6 +465,16 @@ export default async function handler(req, res) {
       const dateKey = getDateKey();
       const checkins = (await storage.get(`checkins:${dateKey}`)) || [];
       return res.json(success({ date: dateKey, checkins, count: checkins.length }));
+    }
+
+    // 查看日志
+    if (path === '/api/admin/logs' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const limit = parseInt(url.searchParams.get('limit')) || 50;
+      const logs = (await storage.get(LOG_KEY)) || [];
+      return res.json(success({ logs: logs.slice(0, limit), count: logs.length }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
