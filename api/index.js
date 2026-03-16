@@ -351,6 +351,62 @@ export default async function handler(req, res) {
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
 
+    // 玩家生成邀请码
+    if (path === '/api/invite' && method === 'POST') {
+      const name = url.searchParams.get('name');
+      
+      if (!name) {
+        return res.status(400).json(error('缺少 name 参数'));
+      }
+      
+      // 验证玩家存在
+      const player = await storage.get(`player:${name}`);
+      if (!player) {
+        return res.status(400).json(error('玩家不存在，请先创建角色'));
+      }
+      
+      // 检查玩家是否已有邀请码
+      const existingCode = await storage.get(`${INVITE_KEY}:player:${name}`);
+      if (existingCode) {
+        return res.json(success({ 
+          message: '你已有邀请码！',
+          code: existingCode.code,
+          bonus: existingCode.bonus,
+          usedCount: existingCode.usedCount || 0
+        }));
+      }
+      
+      // 生成邀请码
+      const code = generateInviteCode();
+      const bonus = 10; // 默认奖励
+      
+      await storage.set(`${INVITE_KEY}:${code}`, {
+        code,
+        creator: name,
+        bonus,
+        used: false,
+        usedBy: null,
+        usedAt: null,
+        createdAt: new Date().toISOString()
+      });
+      
+      // 记录玩家的邀请码
+      await storage.set(`${INVITE_KEY}:player:${name}`, {
+        code,
+        bonus,
+        usedCount: 0
+      });
+      
+      await addLog(storage, '玩家生成邀请码', { creator: name, code });
+      
+      return res.json(success({ 
+        message: '邀请码生成成功！',
+        code: code,
+        bonus: bonus,
+        hint: '邀请朋友加入，双方都获得 ' + bonus + ' 经验奖励！'
+      }));
+    }
+
     // ========== 管理员接口 ==========
     
     // 删除玩家
