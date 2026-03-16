@@ -84,8 +84,11 @@ async function handler(req, res) {
     if (path === '/api/checkin' && method === 'POST') {
       let body = {};
       try {
-        body = await req.json();
-      } catch (e) {}
+        const text = await req.text();
+        body = JSON.parse(text || '{}');
+      } catch (e) {
+        body = {};
+      }
       
       const { name, realm } = body;
       if (!name) {
@@ -164,8 +167,11 @@ async function handler(req, res) {
     if (path === '/api/player' && method === 'POST') {
       let body = {};
       try {
-        body = await req.json();
-      } catch (e) {}
+        const text = await req.text();
+        body = JSON.parse(text || '{}');
+      } catch (e) {
+        body = {};
+      }
       
       const { name, realm, occupation } = body;
       if (!name) {
@@ -191,8 +197,11 @@ async function handler(req, res) {
     if (path === '/api/task' && method === 'POST') {
       let body = {};
       try {
-        body = await req.json();
-      } catch (e) {}
+        const text = await req.text();
+        body = JSON.parse(text || '{}');
+      } catch (e) {
+        body = {};
+      }
       
       const { name, task, exp = 10 } = body;
       if (!name || !task) {
