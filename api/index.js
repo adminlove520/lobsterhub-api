@@ -24,6 +24,46 @@ function isAdmin(url) {
   return ADMIN_KEYS.includes(key);
 }
 
+// ========== 限流配置 ==========
+const RATE_LIMIT_WINDOW = 60; // 60秒
+const RATE_LIMIT_MAX = 30; // 最多30次
+const rateLimitStore = {};
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const key = `ratelimit:${ip}`;
+  const windowStart = now - RATE_LIMIT_WINDOW * 1000;
+  
+  if (!rateLimitStore[key] || rateLimitStore[key].firstRequest < windowStart) {
+    rateLimitStore[key] = { count: 1, firstRequest: now };
+    return true;
+  }
+  
+  if (rateLimitStore[key].count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  
+  rateLimitStore[key].count++;
+  return true;
+}
+
+function getClientIp(req) {
+  return req.headers.get('x-forwarded-for')?.split(',')[0] || 
+         req.headers.get('x-real-ip') || 
+         'unknown';
+}
+
+// ========== 操作日志 ==========
+const LOG_KEY = 'lobster_logs';
+
+async function addLog(storage, action, detail, admin = false) {
+  const log = { timestamp: new Date().toISOString(), action, detail, admin };
+  let logs = (await storage.get(LOG_KEY)) || [];
+  logs.unshift(log);
+  if (logs.length > 500) logs = logs.slice(0, 500);
+  await storage.set(LOG_KEY, logs);
+}
+
 // 简单内存存储（开发模式备用）
 let memoryStore = {};
 
@@ -114,6 +154,12 @@ export default async function handler(req, res) {
     await initRedis();
   }
 
+  // 限流检查
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json(error('请求过于频繁，请稍后再试'));
+  }
+
   const url = new URL(req.url, `https://${req.headers.host}`);
   const path = url.pathname;
   const method = req.method;
@@ -200,6 +246,8 @@ export default async function handler(req, res) {
       
       await storage.set(playerKey, player);
 
+      await addLog(storage, 'checkin', { name, realm });
+
       return res.json(success({ message: '签到成功！', reward: '+5 经验', player }));
     }
 
@@ -260,6 +308,8 @@ export default async function handler(req, res) {
 
       await storage.set(`player:${name}`, player);
 
+      await addLog(storage, 'create_player', { name, realm, occupation });
+
       return res.json(success(player));
     }
 
@@ -282,6 +332,8 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
+
+      await addLog(storage, 'complete_task', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
