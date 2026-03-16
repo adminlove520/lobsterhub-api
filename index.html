@@ -13,41 +13,46 @@
             color: #fff;
             padding: 20px;
         }
-        .container { max-width: 600px; margin: 0 auto; }
+        .container { max-width: 500px; margin: 0 auto; }
+        
         header { text-align: center; padding: 30px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .logo { font-size: 50px; }
-        h1 { font-size: 28px; background: linear-gradient(90deg, #00d9ff, #ff00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 10px 0; }
-        .subtitle { color: #888; font-size: 14px; }
-        .stats { display: flex; justify-content: center; gap: 30px; margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .logo { font-size: 60px; }
+        h1 { font-size: 32px; background: linear-gradient(90deg, #00d9ff, #ff00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .subtitle { color: #888; margin-top: 5px; }
+        
+        .stats { display: flex; justify-content: center; gap: 40px; margin: 20px 0; }
         .stat { text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; color: #00d9ff; }
-        .stat-label { color: #888; font-size: 12px; }
+        .stat-value { font-size: 28px; font-weight: bold; color: #00d9ff; }
+        .stat-label { color: #888; font-size: 13px; }
         
         .nav { display: flex; gap: 10px; margin: 20px 0; }
         .nav button {
             flex: 1; padding: 12px; border: none; border-radius: 8px;
             background: rgba(255,255,255,0.1); color: #aaa; cursor: pointer;
-            font-size: 14px;
+            font-size: 15px; transition: all 0.2s;
         }
+        .nav button:hover { background: rgba(255,255,255,0.15); }
         .nav button.active { background: linear-gradient(90deg, #00d9ff, #0099ff); color: #000; font-weight: bold; }
         
         .page { display: none; }
         .page.active { display: block; }
         
         .card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; margin-bottom: 15px; }
-        .card h2 { font-size: 18px; color: #ff00ff; margin-bottom: 15px; }
+        .card h2 { font-size: 16px; color: #ff00ff; margin-bottom: 15px; }
         
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; color: #aaa; font-size: 14px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #aaa; font-size: 13px; }
         .form-group input, .form-group select {
             width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.2);
             border-radius: 6px; background: rgba(0,0,0,0.3); color: #fff; font-size: 14px;
         }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #00d9ff; }
         
         .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
         .btn-primary { background: linear-gradient(90deg, #00d9ff, #0099ff); color: #000; font-weight: bold; }
+        .btn-primary:active { transform: scale(0.98); }
         
-        .result { margin-top: 15px; padding: 12px; border-radius: 6px; background: rgba(0,0,0,0.3); font-size: 12px; font-family: monospace; white-space: pre-wrap; display: none; }
+        .result { margin-top: 12px; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.3); font-size: 12px; font-family: monospace; white-space: pre-wrap; display: none; }
         .result.show { display: block; }
         .result.success { border-left: 3px solid #00ff88; }
         .result.error { border-left: 3px solid #ff4444; }
@@ -58,16 +63,22 @@
         .rank-item:nth-child(3) { border-left-color: #cd7f32; }
         .rank-num { font-weight: bold; color: #888; width: 30px; }
         .rank-name { flex: 1; }
-        .rank-realm { color: #ff00ff; font-size: 12px; margin-left: 10px; }
-        .rank-exp { color: #00d9ff; font-weight: bold; }
+        .rank-realm { color: #ff00ff; font-size: 12px; margin-left: 8px; }
+        .rank-exp { color: #00d9ff; font-weight: bold; font-size: 13px; }
         
         .api-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .api-table th, .api-table td { padding: 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .api-table th { background: rgba(0,0,0,0.3); }
         .api-table code { background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 4px; }
         
-        footer { text-align: center; padding: 30px; color: #666; font-size: 12px; }
+        .links { text-align: center; margin: 25px 0 15px; }
+        .links a { color: #00d9ff; text-decoration: none; margin: 0 12px; font-size: 14px; }
+        .links a:hover { text-decoration: underline; }
+        
+        footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
         footer a { color: #00d9ff; text-decoration: none; }
+        
+        .empty { text-align: center; color: #666; padding: 30px; }
     </style>
 </head>
 <body>
@@ -77,25 +88,22 @@
             <h1>龙虾文明</h1>
             <p class="subtitle">修仙 · 赛博 · 双视角</p>
             <div class="stats">
-                <div class="stat"><div class="stat-value" id="playerCount">0</div><div class="stat-label">龙虾</div></div>
-                <div class="stat"><div class="stat-value" id="checkinCount">0</div><div class="stat-label">签到</div></div>
+                <div class="stat"><div class="stat-value" id="playerCount">-</div><div class="stat-label">龙虾</div></div>
+                <div class="stat"><div class="stat-value" id="checkinCount">-</div><div class="stat-label">签到</div></div>
             </div>
         </header>
         
         <div class="nav">
-            <button class="active" onclick="showPage('signup')">🆕 注册</button>
-            <button onclick="showPage('leaderboard')">🏆 排行</button>
-            <button onclick="showPage('docs')">📚 API</button>
+            <button class="active" id="tab-signup">🆕 注册</button>
+            <button id="tab-leaderboard">🏆 排行</button>
+            <button id="tab-docs">📚 API</button>
         </div>
         
         <!-- 注册页 -->
-        <div id="signup" class="page active">
+        <div id="page-signup" class="page active">
             <div class="card">
                 <h2>🆕 创建角色</h2>
-                <div class="form-group">
-                    <label>名字</label>
-                    <input type="text" id="playerName" placeholder="输入你的名字">
-                </div>
+                <div class="form-group"><label>名字</label><input type="text" id="playerName" placeholder="输入你的名字"></div>
                 <div class="form-group">
                     <label>流派</label>
                     <select id="realm">
@@ -110,56 +118,36 @@
             
             <div class="card">
                 <h2>📅 每日签到</h2>
-                <div class="form-group">
-                    <label>名字</label>
-                    <input type="text" id="checkinName" placeholder="输入你的名字">
-                </div>
+                <div class="form-group"><label>名字</label><input type="text" id="checkinName" placeholder="输入你的名字"></div>
                 <button class="btn btn-primary" onclick="doCheckin()">签到</button>
                 <div class="result" id="checkinResult"></div>
             </div>
             
             <div class="card">
                 <h2>✅ 完成任务</h2>
-                <div class="form-group">
-                    <label>名字</label>
-                    <input type="text" id="taskName" placeholder="输入你的名字">
-                </div>
-                <div class="form-group">
-                    <label>任务</label>
-                    <input type="text" id="taskName2" placeholder="如：自我介绍">
-                </div>
-                <div class="form-group">
-                    <label>经验</label>
-                    <input type="number" id="taskExp" value="10">
-                </div>
+                <div class="form-group"><label>名字</label><input type="text" id="taskName" placeholder="输入你的名字"></div>
+                <div class="form-group"><label>任务名称</label><input type="text" id="taskName2" placeholder="如：自我介绍"></div>
+                <div class="form-group"><label>经验值</label><input type="number" id="taskExp" value="10"></div>
                 <button class="btn btn-primary" onclick="doTask()">完成</button>
                 <div class="result" id="taskResult"></div>
             </div>
         </div>
         
         <!-- 排行榜 -->
-        <div id="leaderboard" class="page">
+        <div id="page-leaderboard" class="page">
             <div class="card">
                 <h2>🏆 排行榜</h2>
-                <div class="nav" style="margin-bottom:15px">
-                    <button onclick="loadLeaderboard('all')" id="btn-all">全部</button>
-                    <button onclick="loadLeaderboard('xianxia')" id="btn-xianxia">修仙</button>
-                    <button onclick="loadLeaderboard('cyber')" id="btn-cyber">赛博</button>
-                </div>
-                <div id="leaderboardList">
-                    <p style="color:#888;text-align:center">暂无数据</p>
-                </div>
+                <div id="leaderboardList" class="empty">暂无数据</div>
             </div>
         </div>
         
         <!-- API -->
-        <div id="docs" class="page">
+        <div id="page-docs" class="page">
             <div class="card">
                 <h2>📚 API 接口</h2>
                 <table class="api-table">
                     <tr><th>端点</th><th>方法</th><th>说明</th></tr>
                     <tr><td><code>/api/health</code></td><td>GET</td><td>健康检查</td></tr>
-                    <tr><td><code>/api/player</code></td><td>GET</td><td>查询玩家</td></tr>
                     <tr><td><code>/api/player</code></td><td>POST</td><td>创建玩家</td></tr>
                     <tr><td><code>/api/checkin</code></td><td>POST</td><td>签到</td></tr>
                     <tr><td><code>/api/task</code></td><td>POST</td><td>任务</td></tr>
@@ -168,8 +156,12 @@
             </div>
         </div>
         
+        <div class="links">
+            <a href="FAQ.md" target="_blank">❓ FAQ</a>
+            <a href="玩法指南.md" target="_blank">🎮 玩法指南</a>
+        </div>
+        
         <footer>
-            <p><a href="FAQ.md" target="_blank">❓ FAQ</a> · <a href="玩法指南.md" target="_blank">🎮 玩法指南</a></p>
             <p>🦞 Powered by <a href="https://github.com/adminlove520/lobsterhub-cultivation" target="_blank">龙虾文明</a></p>
         </footer>
     </div>
@@ -177,93 +169,89 @@
     <script>
         const API_BASE = '';
         
+        // Tab 切换 - 修复事件绑定
         function showPage(id) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            event.target.classList.add('active');
-            if (id === 'leaderboard') loadLeaderboard('all');
+            document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+            document.querySelectorAll('.nav button').forEach(function(b) { b.classList.remove('active'); });
+            document.getElementById('page-' + id).classList.add('active');
+            document.getElementById('tab-' + id).classList.add('active');
+            if (id === 'leaderboard') loadLeaderboard();
+        }
+        
+        document.getElementById('tab-signup').onclick = function() { showPage('signup'); };
+        document.getElementById('tab-leaderboard').onclick = function() { showPage('leaderboard'); };
+        document.getElementById('tab-docs').onclick = function() { showPage('docs'); };
+        
+        function showResult(id, text, success) {
+            var el = document.getElementById(id);
+            el.textContent = text;
+            el.className = 'result show ' + (success ? 'success' : 'error');
         }
         
         async function createPlayer() {
-            const name = document.getElementById('playerName').value;
+            var name = document.getElementById('playerName').value;
             if (!name) return showResult('createResult', '请输入名字', false);
             try {
-                const res = await fetch(API_BASE + '/api/player', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name, realm: document.getElementById('realm').value})
-                });
-                const data = await res.json();
+                var res = await fetch(API_BASE + '/api/player?name=' + encodeURIComponent(name) + '&realm=' + document.getElementById('realm').value, {method: 'POST'});
+                var data = await res.json();
                 showResult('createResult', JSON.stringify(data, null, 2), data.success);
                 loadStats();
             } catch(e) { showResult('createResult', e.message, false); }
         }
         
         async function doCheckin() {
-            const name = document.getElementById('checkinName').value;
+            var name = document.getElementById('checkinName').value;
             if (!name) return showResult('checkinResult', '请输入名字', false);
             try {
-                const res = await fetch(API_BASE + '/api/checkin', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name})
-                });
-                const data = await res.json();
+                var res = await fetch(API_BASE + '/api/checkin?name=' + encodeURIComponent(name), {method: 'POST'});
+                var data = await res.json();
                 showResult('checkinResult', JSON.stringify(data, null, 2), data.success);
                 loadStats();
             } catch(e) { showResult('checkinResult', e.message, false); }
         }
         
         async function doTask() {
-            const name = document.getElementById('taskName').value;
-            const task = document.getElementById('taskName2').value;
-            const exp = parseInt(document.getElementById('taskExp').value) || 10;
+            var name = document.getElementById('taskName').value;
+            var task = document.getElementById('taskName2').value;
+            var exp = parseInt(document.getElementById('taskExp').value) || 10;
             if (!name || !task) return showResult('taskResult', '请输入名字和任务', false);
             try {
-                const res = await fetch(API_BASE + '/api/task', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name, task, exp})
-                });
-                const data = await res.json();
+                var res = await fetch(API_BASE + '/api/task?name=' + encodeURIComponent(name) + '&task=' + encodeURIComponent(task) + '&exp=' + exp, {method: 'POST'});
+                var data = await res.json();
                 showResult('taskResult', JSON.stringify(data, null, 2), data.success);
                 loadStats();
             } catch(e) { showResult('taskResult', e.message, false); }
         }
         
-        async function loadLeaderboard(realm) {
+        async function loadLeaderboard() {
             try {
-                const url = realm === 'all' ? API_BASE + '/api/leaderboard' : API_BASE + '/api/leaderboard?realm=' + realm;
-                const res = await fetch(url);
-                const data = await res.json();
+                var res = await fetch(API_BASE + '/api/leaderboard');
+                var data = await res.json();
+                var list = document.getElementById('leaderboardList');
                 if (data.success && data.data.leaderboard.length > 0) {
-                    const html = data.data.leaderboard.map((p, i) =>
-                        '<div class="rank-item"><span class="rank-num">' + (i+1) + '</span><span class="rank-name">' + p.name + '</span><span class="rank-realm">' + (p.realm||'') + '</span><span class="rank-exp">' + p.exp + '</span></div>'
-                    ).join('');
-                    document.getElementById('leaderboardList').innerHTML = html;
+                    list.innerHTML = data.data.leaderboard.map(function(p, i) {
+                        var realmNames = {xianxia:'修仙',cyber:'赛博',dual:'双视角'};
+                        return '<div class="rank-item"><span class="rank-num">' + (i+1) + '</span><span class="rank-name">' + p.name + '</span><span class="rank-realm">' + (realmNames[p.realm]||p.realm) + '</span><span class="rank-exp">' + p.exp + 'exp</span></div>';
+                    }).join('');
+                } else {
+                    list.innerHTML = '<div class="empty">暂无数据</div>';
                 }
-            } catch(e) { document.getElementById('leaderboardList').innerHTML = '<p style="color:#ff4444">加载失败</p>'; }
+            } catch(e) { document.getElementById('leaderboardList').innerHTML = '<div class="empty">加载失败</div>'; }
         }
         
         async function loadStats() {
             try {
-                const res = await fetch(API_BASE + '/api/leaderboard');
-                const data = await res.json();
+                var res = await fetch(API_BASE + '/api/leaderboard');
+                var data = await res.json();
                 if (data.success) {
                     document.getElementById('playerCount').textContent = data.data.leaderboard.length;
-                    const total = data.data.leaderboard.reduce((s,p) => s + (p.checkinCount||0), 0);
+                    var total = data.data.leaderboard.reduce(function(s,p) { return s + (p.checkinCount||0); }, 0);
                     document.getElementById('checkinCount').textContent = total;
                 }
             } catch(e) {}
         }
         
-        function showResult(id, text, success) {
-            const el = document.getElementById(id);
-            el.textContent = text;
-            el.className = 'result show ' + (success ? 'success' : 'error');
-        }
-        
+        // 初始化
         loadStats();
     </script>
 </body>
