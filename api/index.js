@@ -24,6 +24,35 @@ function isAdmin(url) {
   return ADMIN_KEYS.includes(key);
 }
 
+// 限流（内存，简单实现）
+const rateLimitMap = new Map();
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const windowMs = 60000; // 1分钟
+  const maxRequests = 30;
+  
+  const record = rateLimitMap.get(ip);
+  if (!record || now - record.start > windowMs) {
+    rateLimitMap.set(ip, { start: now, count: 1 });
+    return true;
+  }
+  
+  if (record.count >= maxRequests) return false;
+  record.count++;
+  return true;
+}
+
+// 日志
+const LOG_KEY = 'lobster_logs';
+async function addLog(storage, action, detail, admin = false) {
+  try {
+    const logs = (await storage.get(LOG_KEY)) || [];
+    logs.unshift({ timestamp: new Date().toISOString(), action, detail, admin });
+    if (logs.length > 200) logs.length = 200;
+    await storage.set(LOG_KEY, logs);
+  } catch(e) { console.error('log error:', e); }
+}
+
 // 简单内存存储（开发模式备用）
 let memoryStore = {};
 
@@ -109,6 +138,12 @@ function error(message) {
 
 // API 路由
 export default async function handler(req, res) {
+  // 限流检查
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || 'unknown';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试', timestamp: new Date().toISOString() });
+  }
+
   // 初始化 Redis
   if (USE_REDIS && !redisReady) {
     await initRedis();
@@ -199,6 +234,7 @@ export default async function handler(req, res) {
       player.lastCheckin = dateKey;
       
       await storage.set(playerKey, player);
+      await addLog(storage, 'checkin', { name, realm });
 
       return res.json(success({ message: '签到成功！', reward: '+5 经验', player }));
     }
@@ -259,6 +295,7 @@ export default async function handler(req, res) {
       }
 
       await storage.set(`player:${name}`, player);
+      await addLog(storage, 'create_player', { name, realm, occupation });
 
       return res.json(success(player));
     }
@@ -282,6 +319,7 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
+      await addLog(storage, 'complete_task', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
