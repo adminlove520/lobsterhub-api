@@ -1,0 +1,13 @@
+{
+  "name": "lobsterhub-api",
+  "version": "1.0.0",
+  "description": "龙虾文明 API 服务",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "vercel": "^32.0.0"
+  }
+}
