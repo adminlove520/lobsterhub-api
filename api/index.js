@@ -24,11 +24,16 @@ function isAdmin(url) {
   return ADMIN_KEYS.includes(key);
 }
 
-// 操作日志（内存存储，最多200条）
-const operationLogs = [];
-function addLog(action, detail, admin = false) {
-  operationLogs.unshift({ timestamp: new Date().toISOString(), action, detail, admin });
-  if (operationLogs.length > 200) operationLogs.length = 200;
+// 操作日志（Redis 持久化，最多500条）
+const LOG_KEY = 'lobster_logs';
+
+async function addLog(storage, action, detail, admin = false) {
+  try {
+    const logs = (await storage.get(LOG_KEY)) || [];
+    logs.unshift({ timestamp: new Date().toISOString(), action, detail, admin });
+    if (logs.length > 500) logs.length = 500;
+    await storage.set(LOG_KEY, logs);
+  } catch(e) { console.error('log error:', e); }
 }
 
 // 简单内存存储（开发模式备用）
@@ -206,7 +211,7 @@ export default async function handler(req, res) {
       player.lastCheckin = dateKey;
       
       await storage.set(playerKey, player);
-      addLog('签到', { name, realm: player.realm });
+      await addLog(storage, '签到', { name, realm: player.realm });
 
       return res.json(success({ message: '签到成功！', reward: '+5 经验', player }));
     }
@@ -267,7 +272,7 @@ export default async function handler(req, res) {
       }
 
       await storage.set(`player:${name}`, player);
-      addLog('创建玩家', { name, realm, occupation });
+      await addLog(storage, '创建玩家', { name, realm, occupation });
 
       return res.json(success(player));
     }
@@ -291,7 +296,7 @@ export default async function handler(req, res) {
       player.completedTasks = (player.completedTasks || 0) + 1;
       
       await storage.set(`player:${name}`, player);
-      addLog('完成任务', { name, task, exp });
+      await addLog(storage, '完成任务', { name, task, exp });
 
       return res.json(success({ message: `任务 "${task}" 完成！`, reward: `+${exp} 经验`, player }));
     }
@@ -345,6 +350,7 @@ export default async function handler(req, res) {
       else player.exp = exp;
       
       await storage.set(`player:${name}`, player);
+      await addLog(storage, '修改经验', { name, exp, action }, true);
       return res.json(success({ message: `${name} 经验已设为 ${player.exp}`, player }));
     }
 
@@ -362,11 +368,13 @@ export default async function handler(req, res) {
         let checkins = (await storage.get(checkinKey)) || [];
         checkins = checkins.filter(n => n !== name);
         await storage.set(checkinKey, checkins);
+        await addLog(storage, '重置签到', { name }, true);
         return res.json(success({ message: `已重置 ${name} 今日签到` }));
       } else {
         // 重置所有今日签到
         const checkinKey = `checkins:${dateKey}`;
         await storage.set(checkinKey, []);
+        await addLog(storage, '重置所有签到', {}, true);
         return res.json(success({ message: '已重置所有玩家今日签到' }));
       }
     }
@@ -385,6 +393,7 @@ export default async function handler(req, res) {
       for (const key of keys) {
         await storage.set(key, null);
       }
+      await addLog(storage, '清空数据', {}, true);
       return res.json(success({ message: '已清空所有玩家数据' }));
     }
 
@@ -428,7 +437,7 @@ export default async function handler(req, res) {
       }
       const newKey = generateAdminKey();
       ADMIN_KEYS.push(newKey);
-      addLog('生成密钥', {}, true);
+      await addLog(storage, '生成密钥', {}, true);
       return res.json(success({ 
         message: '新密钥已生成（仅显示一次，请妥善保管！）',
         newKey: newKey,
@@ -442,7 +451,8 @@ export default async function handler(req, res) {
         return res.status(403).json(error('无权限，需要 admin_key'));
       }
       const limit = parseInt(url.searchParams.get('limit')) || 50;
-      return res.json(success({ logs: operationLogs.slice(0, limit), count: operationLogs.length }));
+      const logs = (await storage.get(LOG_KEY)) || [];
+      return res.json(success({ logs: logs.slice(0, limit), count: logs.length }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
