@@ -4,12 +4,13 @@
 const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 const USE_REDIS = !!process.env.REDIS_URL;
 
-// 管理员密钥（环境变量）
-const ADMIN_KEY = process.env.ADMIN_KEY || 'lobster-admin-2026';
+// 管理员密钥列表（环境变量，逗号分隔）
+const ADMIN_KEYS = (process.env.ADMIN_KEYS || process.env.ADMIN_KEY || 'lobster-admin-2026').split(',').map(k => k.trim());
 
 // 验证管理员
 function isAdmin(url) {
-  return url.searchParams.get('admin_key') === ADMIN_KEY;
+  const key = url.searchParams.get('admin_key');
+  return ADMIN_KEYS.includes(key);
 }
 
 // 简单内存存储（开发模式备用）
@@ -388,6 +389,15 @@ export default async function handler(req, res) {
       const dateKey = getDateKey();
       const checkins = (await storage.get(`checkins:${dateKey}`)) || [];
       return res.json(success({ date: dateKey, checkins, count: checkins.length }));
+    }
+
+    // 获取管理员列表
+    if (path === '/api/admin/admins' && method === 'GET') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const safeKeys = ADMIN_KEYS.map(k => k.slice(0, 4) + '****');
+      return res.json(success({ admins: safeKeys, count: safeKeys.length }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
