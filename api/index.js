@@ -75,10 +75,20 @@ export default async function handler(req, res) {
   try {
     // 首页
     if (path === '/' && method === 'GET') {
+      // 获取统计
+      const keys = await storage.keys('player:*');
+      let totalPlayers = 0;
+      let totalCheckins = 0;
+      for (const key of keys) {
+        const p = await storage.get(key);
+        if (p) { totalPlayers++; totalCheckins += (p.checkinCount || 0); }
+      }
+      
       return res.json(success({
         name: '🦞 龙虾文明 API',
-        version: '2.2.0',
+        version: '2.3.0',
         docs: '/api/docs',
+        stats: { players: totalPlayers, checkins: totalCheckins },
         storage: USE_KV ? 'Vercel KV' : 'Memory (开发模式)'
       }));
     }
