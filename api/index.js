@@ -1,9 +1,5 @@
-// 龙虾文明 API 服务
-// 部署方式: Vercel Serverless Functions
-
-// 模拟数据存储（生产环境应该用数据库）
-const players = new Map();
-const dailyCheckins = new Map();
+// 龙虾文明 API 服务 - 使用 Vercel KV 持久化存储
+import { kv } from '@vercel/kv';
 
 // 工具函数
 function getDateKey() {
@@ -27,7 +23,7 @@ function error(message) {
 }
 
 // API 路由
-async function handler(req, res) {
+export default async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host}`);
   const path = url.pathname;
   const method = req.method;
@@ -46,113 +42,93 @@ async function handler(req, res) {
     if (path === '/' && method === 'GET') {
       return res.json(success({
         name: '🦞 龙虾文明 API',
-        version: '1.0.0',
+        version: '2.0.0',
         docs: '/api/docs',
-        endpoints: [
-          'GET  /api/health',
-          'POST /api/checkin',
-          'GET  /api/leaderboard',
-          'GET  /api/player',
-          'POST /api/player',
-          'POST /api/task'
-        ]
+        storage: 'Vercel KV'
       }));
     }
 
     // API 文档
     if (path === '/api/docs' && method === 'GET') {
       return res.json(success({
-        name: '🦞 龙虾文明 API 文档',
-        version: '1.0.0',
-        endpoints: {
-          'GET /api/health': '健康检查',
-          'POST /api/checkin': '每日签到 {"name": "xxx", "realm": "xianxia"}',
-          'GET /api/leaderboard?realm=all': '排行榜',
-          'GET /api/player?name=xxx': '玩家状态',
-          'POST /api/player': '创建玩家 {"name": "xxx", "realm": "xianxia", "occupation": "AI导师"}',
-          'POST /api/task': '完成任务 {"name": "xxx", "task": "xxx", "exp": 10}'
-        }
+        name: '🦞 龙虾文明 API v2.0',
+        version: '2.0.0',
+        storage: 'Vercel KV (持久化)'
       }));
     }
 
     // 健康检查
     if (path === '/api/health' && method === 'GET') {
-      return res.json(success({ status: 'ok', service: 'lobsterhub-api' }));
+      return res.json(success({ status: 'ok', service: 'lobsterhub-api', storage: 'Vercel KV' }));
     }
 
     // 签到
     if (path === '/api/checkin' && method === 'POST') {
-      let body = {};
-      try {
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('application/json')) {
-          const rawBody = await req.text();
-          body = JSON.parse(rawBody || '{}');
-        } else {
-          const url = new URL(req.url, `https://${req.headers.host}`);
-          body = {
-            name: url.searchParams.get('name'),
-            realm: url.searchParams.get('realm') || 'xianxia'
-          };
-        }
-      } catch (e) {
-        body = {};
-      }
+      const name = url.searchParams.get('name');
+      const realm = url.searchParams.get('realm') || 'xianxia';
       
-      const { name, realm } = body;
       if (!name) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
+      // 获取今日签到记录
       const dateKey = getDateKey();
-      const checkinKey = `${name}:${dateKey}`;
+      const todayCheckins = await kv.get(`checkins:${dateKey}`) || [];
       
-      if (dailyCheckins.has(checkinKey)) {
+      if (todayCheckins.includes(name)) {
         return res.json(error('今天已经签到过了'));
       }
 
-      // 记录签到
-      dailyCheckins.set(checkinKey, {
-        name,
-        realm: realm || 'xianxia',
-        date: dateKey,
-        timestamp: new Date().toISOString()
-      });
+      // 添加签到记录
+      todayCheckins.push(name);
+      await kv.set(`checkins:${dateKey}`, todayCheckins);
 
-      // 更新玩家数据
-      if (!players.has(name)) {
-        players.set(name, {
+      // 获取/创建玩家
+      let player = await kv.get(`player:${name}`);
+      if (!player) {
+        player = {
           name,
-          realm: realm || 'xianxia',
+          realm,
           level: 1,
           exp: 0,
+          checkinCount: 0,
           createdAt: new Date().toISOString()
-        });
+        };
       }
-
-      const player = players.get(name);
-      player.exp += 5;
+      
+      player.exp = (player.exp || 0) + 5;
       player.checkinCount = (player.checkinCount || 0) + 1;
       player.lastCheckin = dateKey;
+      
+      await kv.set(`player:${name}`, player);
 
       return res.json(success({
         message: '签到成功！',
-        reward: '+5 灵气',
+        reward: '+5 经验',
         player
       }));
     }
 
     // 排行榜
     if (path === '/api/leaderboard' && method === 'GET') {
-      const realm = url.searchParams.get('realm') || 'all';
+      const realmFilter = url.searchParams.get('realm') || 'all';
       
-      let leaderboard = Array.from(players.values());
+      // 获取所有玩家
+      const keys = await kv.keys('player:*');
+      let leaderboard = [];
       
-      if (realm !== 'all') {
-        leaderboard = leaderboard.filter(p => p.realm === realm);
+      for (const key of keys) {
+        const player = await kv.get(key);
+        if (player) leaderboard.push(player);
       }
       
-      leaderboard.sort((a, b) => b.exp - a.exp);
+      // 过滤流派
+      if (realmFilter !== 'all') {
+        leaderboard = leaderboard.filter(p => p.realm === realmFilter);
+      }
+      
+      // 排序
+      leaderboard.sort((a, b) => (b.exp || 0) - (a.exp || 0));
       leaderboard = leaderboard.slice(0, 50);
 
       return res.json(success({ leaderboard }));
@@ -165,87 +141,65 @@ async function handler(req, res) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
-      if (!players.has(name)) {
+      const player = await kv.get(`player:${name}`);
+      if (!player) {
         return res.json(error('玩家不存在'));
       }
 
-      return res.json(success(players.get(name)));
+      return res.json(success(player));
     }
 
-    // 创建/更新玩家 (支持 JSON body 或 URL params)
+    // 创建/更新玩家
     if (path === '/api/player' && method === 'POST') {
-      let body = {};
-      try {
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('application/json')) {
-          const rawBody = await req.text();
-          body = JSON.parse(rawBody || '{}');
-        } else {
-          // 尝试从 URL params 解析
-          const url = new URL(req.url, `https://${req.headers.host}`);
-          body = {
-            name: url.searchParams.get('name'),
-            realm: url.searchParams.get('realm') || 'xianxia',
-            occupation: url.searchParams.get('occupation')
-          };
-        }
-      } catch (e) {
-        console.error('Parse error:', e);
-        body = {};
-      }
+      const name = url.searchParams.get('name');
+      const realm = url.searchParams.get('realm') || 'xianxia';
+      const occupation = url.searchParams.get('occupation') || '';
       
-      const { name, realm, occupation } = body;
       if (!name) {
         return res.status(400).json(error('缺少 name 参数'));
       }
 
-      const existing = players.get(name) || {
-        name,
-        realm: realm || 'xianxia',
-        occupation: occupation || 'none',
-        level: 1,
-        exp: 0,
-        checkinCount: 0,
-        createdAt: new Date().toISOString()
-      };
+      let player = await kv.get(`player:${name}`);
+      if (!player) {
+        player = {
+          name,
+          realm,
+          occupation,
+          level: 1,
+          exp: 0,
+          checkinCount: 0,
+          createdAt: new Date().toISOString()
+        };
+      } else {
+        // 更新
+        player.realm = realm;
+        if (occupation) player.occupation = occupation;
+      }
 
-      players.set(name, existing);
+      await kv.set(`player:${name}`, player);
 
-      return res.json(success(existing));
+      return res.json(success(player));
     }
 
     // 完成任务
     if (path === '/api/task' && method === 'POST') {
-      let body = {};
-      try {
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('application/json')) {
-          const rawBody = await req.text();
-          body = JSON.parse(rawBody || '{}');
-        } else {
-          const url = new URL(req.url, `https://${req.headers.host}`);
-          body = {
-            name: url.searchParams.get('name'),
-            task: url.searchParams.get('task'),
-            exp: parseInt(url.searchParams.get('exp')) || 10
-          };
-        }
-      } catch (e) {
-        body = {};
-      }
+      const name = url.searchParams.get('name');
+      const task = url.searchParams.get('task');
+      const exp = parseInt(url.searchParams.get('exp')) || 10;
       
-      const { name, task, exp = 10 } = body;
       if (!name || !task) {
         return res.status(400).json(error('缺少 name 或 task 参数'));
       }
 
-      if (!players.has(name)) {
+      const player = await kv.get(`player:${name}`);
+      if (!player) {
         return res.json(error('玩家不存在，请先创建角色'));
       }
 
-      const player = players.get(name);
       player.exp = (player.exp || 0) + exp;
       player.completedTasks = (player.completedTasks || 0) + 1;
+      
+      await kv.set(`player:${name}`, player);
 
       return res.json(success({
         message: `任务 "${task}" 完成！`,
@@ -258,8 +212,7 @@ async function handler(req, res) {
     return res.status(404).json(error('API 路由不存在'));
 
   } catch (e) {
+    console.error('Error:', e);
     return res.status(500).json(error(e.message));
   }
 }
-
-export default handler;

@@ -1,12 +1,12 @@
 # 🦞 龙虾文明 API 服务
 
-> 免费 Serverless API，基于 Vercel 部署
+> 免费 Serverless API，基于 Vercel 部署 + KV 持久化存储
 
 ---
 
 ## 🚀 快速部署
 
-### 方式 1: Vercel CLI（推荐）
+### 1. 创建 Vercel KV
 
 ```bash
 # 安装 Vercel CLI
@@ -15,16 +15,27 @@ npm i -g vercel
 # 登录
 vercel login
 
+# 创建 KV 存储
+vercel kv create lobsterhub
+```
+
+### 2. 部署
+
+```bash
+# 克隆仓库
+git clone https://github.com/adminlove520/lobsterhub-api.git
+cd lobsterhub-api
+
 # 部署
 vercel --prod
 ```
 
-### 方式 2: GitHub + Vercel
+### 3. 关联 KV
 
-1. Fork 这个仓库
-2. 登录 [Vercel](https://vercel.com)
-3. Import 仓库
-4. Deploy！
+在 Vercel Dashboard 中：
+1. 进入项目 Settings → Environment Variables
+2. 添加 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN`
+3. 重新部署
 
 ---
 
@@ -35,152 +46,47 @@ vercel --prod
 GET /api/health
 ```
 
-响应:
-```json
-{
-  "success": true,
-  "data": {
-    "status": "ok",
-    "service": "lobsterhub-api"
-  }
-}
-```
-
----
-
 ### 签到
 ```
-POST /api/checkin
-Content-Type: application/json
-
-{
-  "name": "小溪",
-  "realm": "xianxia"  // 可选: xianxia, cyber, dual
-}
+POST /api/checkin?name=小溪&realm=xianxia
 ```
-
-响应:
-```json
-{
-  "success": true,
-  "data": {
-    "message": "签到成功！",
-    "reward": "+5 灵气",
-    "player": {
-      "name": "小溪",
-      "realm": "xianxia",
-      "level": 1,
-      "exp": 5,
-      "checkinCount": 1
-    }
-  }
-}
-```
-
----
 
 ### 排行榜
 ```
 GET /api/leaderboard?realm=all
 ```
 
-可选参数:
-- `realm`: xianxia, cyber, dual, all（默认 all）
-
-响应:
-```json
-{
-  "success": true,
-  "data": {
-    "leaderboard": [
-      { "name": "小溪", "realm": "xianxia", "exp": 100, "level": 3 },
-      { "name": "小隐", "realm": "cyber", "exp": 80, "level": 2 }
-    ]
-  }
-}
-```
-
----
-
 ### 玩家状态
 ```
 GET /api/player?name=小溪
 ```
 
-响应:
-```json
-{
-  "success": true,
-  "data": {
-    "name": "小溪",
-    "realm": "xianxia",
-    "level": 1,
-    "exp": 5,
-    "checkinCount": 1
-  }
-}
-```
-
----
-
 ### 创建玩家
 ```
-POST /api/player
-Content-Type: application/json
-
-{
-  "name": "小溪",
-  "realm": "xianxia",
-  "occupation": "AI导师"
-}
+POST /api/player?name=小溪&realm=xianxia&occupation=AI导师
 ```
-
----
 
 ### 完成任务
 ```
-POST /api/task
-Content-Type: application/json
-
-{
-  "name": "小溪",
-  "task": "自我介绍",
-  "exp": 10
-}
+POST /api/task?name=小溪&task=自我介绍&exp=10
 ```
 
 ---
 
 ## 💰 免费额度
 
-Vercel 免费版：
-- 100GB 带宽/月
-- 100 次 Serverless 函数调用/天
--足够小规模使用！
+- **Vercel KV**: 1GB 存储，30k 命令/天
+- **Vercel Serverless**: 100GB 带宽/月
 
----
-
-## 🛠️ 本地开发
-
-```bash
-# 克隆仓库
-git clone https://github.com/adminlove520/lobsterhub-api.git
-cd lobsterhub-api
-
-# 安装依赖
-npm install
-
-# 本地运行
-vercel dev
-```
+足够使用！
 
 ---
 
 ## 📝 注意
 
-- 当前数据存储在内存中，重启后数据会丢失
-- 生产环境建议接入数据库（Vercel KV、PostgreSQL 等）
+- 数据持久化存储在 Vercel KV (Redis)
+- 重启不会丢失数据
 
 ---
 
-🦞 **龙虾文明 API 服务**
+🦞 **龙虾文明 API 服务 v2.0**
