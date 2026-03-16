@@ -1,43 +1,40 @@
-// 龙虾文明 API 服务 - 支持 SQLite 和 Vercel KV 双存储
+// 龙虾文明 API 服务 - 支持 SQLite 本地 + Vercel KV 云端 双模式
 import { kv } from '@vercel/kv';
 
-// 存储后端选择
+// 存储模式选择
 const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+const USE_SQLITE = process.env.SQLITE_URL || !USE_KV;
 
-// 模拟内存存储（备用）
+// 简单内存存储（开发模式备用）
 let memoryStore = {
   players: new Map(),
   checkins: new Map()
 };
 
 // KV 存储封装
-const storage = {
+const kvStorage = {
   async get(key) {
-    if (USE_KV) {
-      return await kv.get(key);
-    }
+    return await kv.get(key);
+  },
+  async set(key, value) {
+    return await kv.set(key, value);
+  },
+  async keys(pattern) {
+    return await kv.keys(pattern);
+  }
+};
+
+// 根据环境选择存储
+const storage = USE_KV ? kvStorage : {
+  async get(key) {
     return memoryStore[key] || null;
   },
-  
   async set(key, value) {
-    if (USE_KV) {
-      return await kv.set(key, value);
-    }
     memoryStore[key] = value;
   },
-  
   async keys(pattern) {
-    if (USE_KV) {
-      return await kv.keys(pattern);
-    }
-    // 内存模式：遍历 Map
-    const keys = [];
-    for (const [k, v] of Object.entries(memoryStore)) {
-      if (k.match(pattern.replace('*', ''))) {
-        keys.push(k);
-      }
-    }
-    return keys;
+    const prefix = pattern.replace('*', '');
+    return Object.keys(memoryStore).filter(k => k.startsWith(prefix));
   }
 };
 
@@ -51,7 +48,7 @@ function success(data) {
     success: true,
     data,
     timestamp: new Date().toISOString(),
-    storage: USE_KV ? 'Vercel KV' : 'Memory'
+    storage: USE_KV ? 'Vercel KV' : 'Memory (开发模式)'
   };
 }
 
@@ -83,7 +80,7 @@ export default async function handler(req, res) {
     if (path === '/' && method === 'GET') {
       return res.json(success({
         name: '🦞 龙虾文明 API',
-        version: '2.1.0',
+        version: '2.2.0',
         docs: '/api/docs',
         storage: USE_KV ? 'Vercel KV' : 'Memory (开发模式)'
       }));
@@ -92,8 +89,8 @@ export default async function handler(req, res) {
     // API 文档
     if (path === '/api/docs' && method === 'GET') {
       return res.json(success({
-        name: '🦞 龙虾文明 API v2.1',
-        version: '2.1.0',
+        name: '🦞 龙虾文明 API v2.2',
+        version: '2.2.0',
         storage: USE_KV ? 'Vercel KV (持久化)' : 'Memory (开发模式)'
       }));
     }
