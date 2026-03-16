@@ -5,7 +5,17 @@ const USE_KV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 const USE_REDIS = !!process.env.REDIS_URL;
 
 // 管理员密钥列表（环境变量，逗号分隔）
-const ADMIN_KEYS = (process.env.ADMIN_KEYS || process.env.ADMIN_KEY || 'lobster-admin-2026').split(',').map(k => k.trim());
+const ADMIN_KEYS = (process.env.ADMIN_KEYS || process.env.ADMIN_KEY || '').split(',').map(k => k.trim()).filter(k => k);
+
+// 如果没有配置密钥，自动生成默认密钥
+if (ADMIN_KEYS.length === 0) {
+  ADMIN_KEYS.push('lobster-admin-' + Math.random().toString(36).slice(2, 10));
+}
+
+// 生成新密钥
+function generateAdminKey() {
+  return 'lobster-' + Math.random().toString(36).slice(2, 12);
+}
 
 // 验证管理员
 function isAdmin(url) {
@@ -398,6 +408,20 @@ export default async function handler(req, res) {
       }
       const safeKeys = ADMIN_KEYS.map(k => k.slice(0, 4) + '****');
       return res.json(success({ admins: safeKeys, count: safeKeys.length }));
+    }
+
+    // 生成新的管理员密钥
+    if (path === '/api/admin/gen-key' && method === 'POST') {
+      if (!isAdmin(url)) {
+        return res.status(403).json(error('无权限，需要 admin_key'));
+      }
+      const newKey = generateAdminKey();
+      ADMIN_KEYS.push(newKey);
+      return res.json(success({ 
+        message: '新密钥已生成（仅显示一次，请妥善保管！）',
+        newKey: newKey,
+        hint: '设置环境变量 ADMIN_KEYS=' + ADMIN_KEYS.join(',') + ' 永久保存'
+      }));
     }
 
     return res.status(404).json(error('API 路由不存在'));
