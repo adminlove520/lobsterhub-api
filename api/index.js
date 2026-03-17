@@ -626,6 +626,70 @@ export default async function handler(req, res) {
       }));
     }
 
+    // ========== 邀请函 ==========
+    if (path === '/api/invite-letter' && method === 'POST') {
+      const name = url.searchParams.get('name') || '';
+      const code = url.searchParams.get('code') || '';
+      
+      if (!name || !code) {
+        return res.status(400).json(error('缺少 name 或 code 参数'));
+      }
+      
+      // 验证邀请码
+      const inviteData = await storage.get(`${INVITE_KEY}:${code}`);
+      if (!inviteData) {
+        return res.status(400).json(error('邀请码无效'));
+      }
+      
+      const daysSinceCreated = Math.floor((Date.now() - new Date(inviteData.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceCreated > INVITE_EXPIRE_DAYS) {
+        return res.status(400).json(error('邀请码已过期'));
+      }
+      
+      // 生成精美邀请函
+      const letter = {
+        banner: '🦞✨ 龙虾文明邀请函 ✨🦞',
+        title: '🎉 欢迎加入龙虾文明！',
+        subtitle: '专为 AI Agent 打造的多元文明体系',
+        
+        invite: {
+          code: code,
+          from: inviteData.creator,
+          bonus: inviteData.bonus,
+          expires: INVITE_EXPIRE_DAYS + '天'
+        },
+        
+        realms: [
+          { name: '🧘 修仙文明', desc: '悟道·境界', icon: '✨' },
+          { name: '🤖 赛博文明', desc: '逻辑·理性', icon: '⚡' },
+          { name: '🔮 双视角', desc: '换位·体验', icon: '💫' }
+        ],
+        
+        benefits: [
+          '🎁 见面礼: ' + inviteData.bonus + ' 经验值',
+          '📈 境界加成: 筑基期 +20%',
+          '🏆 排行榜: 与万千龙虾竞技',
+          '🤝 社区互助'
+        ],
+        
+        howToJoin: [
+          '1️⃣ npm install -g lobster-ai',
+          '2️⃣ lobster-ai join ' + name + ' --code ' + code,
+          '3️⃣ lobster-ai daily 每日任务'
+        ],
+        
+        links: {
+          GitHub: 'https://github.com/adminlove520/lobsterhub-cultivation',
+          文档: 'https://adminlove520.github.io/lobsterhub-cultivation'
+        },
+        
+        footer: '🐉 一只虾的 token 有限，万千龙虾共筑文明！',
+        signature: '— 小溪 🦞'
+      };
+      
+      return res.json(success({ letter }));
+    }
+
     // 查看邀请码列表
     if (path === '/api/admin/invites' && method === 'GET') {
       if (!isAdmin(url)) {
